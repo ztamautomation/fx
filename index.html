@@ -8,7 +8,7 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Manrope:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600&display=swap">
 <style>
 /* ApexFX Modern Dark (design/stitch_forex_trading_dashboard/DESIGN.md) — single dark theme by design.
-   Layout: mobile stack; >=980px splits into two columns, history full width; bottom nav jumps to sections. */
+   Layout: one column, split into pages (Dashboard / Bots / Positions / History) switched by the bottom nav via #hash. */
 :root {
   color-scheme: dark;
   --canvas: #0a0d12; --card: #121721; --float: #1a202c; --field: #0d1118;
@@ -24,7 +24,7 @@
 * { box-sizing: border-box; }
 html { background: var(--canvas); }
 body { margin: 0; background: var(--canvas); color: var(--ink); font: 500 15px/22px var(--body); -webkit-font-smoothing: antialiased; }
-.wrap { max-width: 1180px; margin: 0 auto; padding-block: 16px calc(88px + env(safe-area-inset-bottom, 0px));
+.wrap { max-width: 720px; margin: 0 auto; padding-block: 16px calc(88px + env(safe-area-inset-bottom, 0px));
   padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
   display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; }
 .mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
@@ -131,38 +131,30 @@ nav.bottom a { display: grid; justify-items: center; gap: 2px; padding: 6px 0; m
 nav.bottom a svg { width: 22px; height: 22px; }
 nav.bottom a.on { color: var(--cyan); }
 
-@media (min-width: 980px) {
-  .wrap { grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); align-items: start; column-gap: 16px; }
-  .full { grid-column: 1 / -1; }
-  .colA { grid-column: 1; display: grid; gap: 12px; }
-  .colB { grid-column: 2; display: grid; gap: 12px; }
-  .tiles { grid-template-columns: repeat(4, 1fr); }
-}
-@media (max-width: 979px) { .colA, .colB { display: contents; } }
+.wrap > [data-page]:not(.show) { display: none; }
+@media (min-width: 640px) { .tiles { grid-template-columns: repeat(4, 1fr); } }
 </style>
 </head>
 <body>
-<div class="wrap" id="dash">
-  <header class="full" style="display:grid;gap:10px">
+<div class="wrap">
+  <header style="display:grid;gap:10px">
     <div class="top">
       <div class="grow"><h1>Trade Dashboard</h1><span class="chip off" id="live"><span class="dot"></span><span>LOADING</span></span></div>
       <button class="icon-btn" id="refresh" type="button" aria-label="โหลดข้อมูลใหม่">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11a8 8 0 0 0-14.9-3.5M4 4v4h4M4 13a8 8 0 0 0 14.9 3.5M20 20v-4h-4"/></svg>
       </button>
     </div>
-    <div class="balrow"><span><small>BAL</small><span id="hBal">–</span></span><span><small>EQ</small><span id="hEq">–</span></span></div>
     <div class="status"><span class="l"><span class="dot" id="sDot" style="color:var(--slate)"></span><span>XM MT5 · DEMO</span></span><span id="meta">กำลังโหลด…</span></div>
     <div id="warn" class="warn" hidden></div>
   </header>
 
-  <div class="colA">
-    <div class="card acct">
+    <div class="card acct" data-page="dash">
       <span class="tick">Account capital</span><span class="tick r">Floating P&amp;L</span>
       <span class="big" id="aBal">–</span><span class="mono r" id="aFloat" style="font-size:18px;font-weight:600">–</span>
       <span class="k">Equity <span class="mono" id="aEq" style="color:var(--ink)">–</span></span><span class="k r">ถืออยู่ <span class="mono" id="aOpen" style="color:var(--ink)">0</span> ไม้</span>
     </div>
 
-    <div class="filters">
+    <div class="filters" data-page="dash history">
       <div class="seg" role="group" aria-label="ช่วงเวลา">
         <button type="button" data-range="today">วันนี้</button>
         <button type="button" data-range="7">7 วัน</button>
@@ -173,43 +165,39 @@ nav.bottom a.on { color: var(--cyan); }
       <div class="dates"><input type="date" id="from" aria-label="ตั้งแต่วันที่"> – <input type="date" id="to" aria-label="ถึงวันที่"></div>
     </div>
 
-    <div class="card hero" id="hero"></div>
-    <div class="tiles" id="tiles"></div>
+    <div class="card hero" id="hero" data-page="dash"></div>
+    <div class="tiles" id="tiles" data-page="dash"></div>
 
-    <section class="card chart" id="chartCard">
+    <section class="card chart" id="chartCard" data-page="dash">
       <div class="sec-head"><h2>กำไรสะสม <span class="muted" style="font-size:14px;font-weight:500">(USD)</span></h2><span class="chip cyan" id="pfChip">PF –</span></div>
       <div class="tick" id="chartRange"></div>
       <div id="chart"></div>
     </section>
-  </div>
 
-  <div class="colB">
-    <section id="scripts">
-      <div class="sec-head"><h2>ผลงานแยกตามระบบ</h2><span class="tick" id="scriptCount"></span></div>
-      <div class="grid2" id="byScript"></div>
-    </section>
-
-    <section id="positions">
-      <div class="sec-head"><h2>ไม้ที่ถืออยู่ <span class="chip off" id="openCount">0</span></h2><span class="mono" id="openSum" style="font-size:13px"></span></div>
-      <div class="card list" id="open"></div>
-    </section>
-
-    <section id="bots">
+    <section data-page="bots">
       <div class="sec-head"><h2>สถานะบอท <span class="chip off" id="botsCount">–</span></h2><span class="tick" id="botsMeta"></span></div>
       <div class="card list" id="botList"></div>
       <p class="note">Backtest 12 เดือนล่าสุด หักสเปรด XM แล้ว (ทอง 0.55 USD, คู่เงิน 2.0–4.0 pip) · R = เท่าของความเสี่ยงต่อไม้</p>
     </section>
-  </div>
+    <section data-page="bots">
+      <div class="sec-head"><h2>ผลงานแยกตามระบบ</h2><span class="tick" id="scriptCount"></span></div>
+      <div class="grid2" id="byScript"></div>
+    </section>
 
-  <section class="full" id="history">
-    <div class="sec-head"><h2>History</h2><span class="tick" id="histCount"></span></div>
-    <div class="card list" id="histList"></div>
-  </section>
+    <section data-page="positions">
+      <div class="sec-head"><h2>ไม้ที่ถืออยู่ <span class="chip off" id="openCount">0</span></h2><span class="mono" id="openSum" style="font-size:13px"></span></div>
+      <div class="card list" id="open"></div>
+    </section>
+
+    <section data-page="history">
+      <div class="sec-head"><h2>History</h2><span class="tick" id="histCount"></span></div>
+      <div class="card list" id="histList"></div>
+    </section>
 </div>
 
-<nav class="bottom" aria-label="ไปยังส่วน">
+<nav class="bottom" aria-label="เลือกหน้า">
   <div>
-    <a href="#dash" class="on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 4v16M6 8h-2v6h2M12 6v12M12 9h-2v5h2M18 3v18M18 7h-2v8h2"/></svg>Dashboard</a>
+    <a href="#dash"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 4v16M6 8h-2v6h2M12 6v12M12 9h-2v5h2M18 3v18M18 7h-2v8h2"/></svg>Dashboard</a>
     <a href="#bots"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="8" width="16" height="12" rx="3"/><path d="M12 8V4M9 14h.01M15 14h.01"/></svg>Bots</a>
     <a href="#positions"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17l6-6 4 4 8-8M15 7h6v6"/></svg>Positions</a>
     <a href="#history"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M9 8h6M9 12h6M9 16h4"/></svg>History</a>
@@ -420,7 +408,7 @@ function renderByScript(closed, open) {
   const t = $("byScript");
   t.replaceChildren();
   const names = [...new Set([...data.closed, ...data.open].map((x) => x.script))].sort();
-  $("scriptCount").textContent = `${names.length} ระบบ`;
+  $("scriptCount").textContent = `${names.length} ระบบ · ${RANGE_LABEL[range]}`;
   if (!names.length) { t.append(el("div", "ยังไม่มีไม้", "empty")); return; }
   for (const name of names) {
     const c = closed.filter((x) => x.script === name), o = open.filter((x) => x.script === name);
@@ -513,10 +501,6 @@ async function load() {
   const age = (Date.now() / 1000 - data.updated) / 60;
   const a = data.account;
   const fl = data.open.reduce((s, p) => s + p.floating, 0);
-  const eqPct = a.balance ? ((a.equity - a.balance) / a.balance) * 100 : 0;
-  $("hBal").textContent = "$" + num(a.balance);
-  $("hEq").textContent = `$${num(a.equity)} (${eqPct >= 0 ? "+" : ""}${eqPct.toFixed(2)}%)`;
-  $("hEq").className = tone(eqPct) || "";
   $("aBal").textContent = "$" + num(a.balance);
   $("aEq").textContent = "$" + num(a.equity);
   $("aFloat").textContent = money(fl);
@@ -582,13 +566,15 @@ for (const id of ["from", "to"]) $(id).addEventListener("change", () => { range 
 $("script").addEventListener("change", () => { histShown = HIST_PAGE; render(); });
 $("refresh").addEventListener("click", () => { load(); loadBots(); });
 
-// ไฮไลต์เมนูล่างตามส่วนที่กำลังดู
-const navLinks = [...document.querySelectorAll("nav.bottom a")];
-addEventListener("scroll", () => {
-  let cur = navLinks[0];
-  for (const a of navLinks.slice(1)) { const s = document.querySelector(a.getAttribute("href")); if (s && s.getBoundingClientRect().top < innerHeight * 0.4) cur = a; }
-  for (const a of navLinks) a.classList.toggle("on", a === cur);
-}, { passive: true });
+// แยกหน้าตาม #hash ของเมนูล่าง
+function showPage() {
+  const names = ["dash", "bots", "positions", "history"], h = location.hash.slice(1), page = names.includes(h) ? h : "dash";
+  for (const e of document.querySelectorAll("[data-page]")) e.classList.toggle("show", e.dataset.page.split(" ").includes(page));
+  for (const a of document.querySelectorAll("nav.bottom a")) { const on = a.getAttribute("href") === "#" + page; a.classList.toggle("on", on); a.toggleAttribute("aria-current", on); }
+  scrollTo(0, 0);
+}
+addEventListener("hashchange", showPage);
+showPage();
 
 load();
 loadBots();
