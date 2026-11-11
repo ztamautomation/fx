@@ -1,0 +1,348 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Trade Dashboard</title>
+<style>
+:root {
+  --bg: #f4f4f2; --surface: #fcfcfb; --ink: #1b1b1a; --muted: #6b6b66; --line: #e2e1dc;
+  --up: #006300; --down: #c22f2f; --accent: #2a78d6; --warn-bg: #fff3d6; --warn-ink: #6b4a00;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #111110; --surface: #1a1a19; --ink: #ededea; --muted: #9c9b95; --line: #2e2e2c;
+    --up: #2fbf2f; --down: #f07070; --accent: #3987e5; --warn-bg: #3a2e10; --warn-ink: #f2d27a;
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.45 system-ui, "Noto Sans Thai", sans-serif; }
+main { max-width: 1100px; margin: 0 auto; padding: 16px; }
+h1 { font-size: 1.35rem; margin: 0; }
+h2 { font-size: 1.05rem; margin: 28px 0 10px; }
+.top { display: flex; flex-wrap: wrap; gap: 4px 16px; align-items: baseline; justify-content: space-between; }
+.muted { color: var(--muted); font-size: .88rem; }
+.warn { background: var(--warn-bg); color: var(--warn-ink); padding: 8px 12px; border-radius: 6px; margin-top: 10px; }
+.filters { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 16px 0; }
+.filters b { margin-right: 2px; }
+.sep { width: 12px; }
+button, input, select { font: inherit; color: inherit; background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 6px 12px; }
+button { cursor: pointer; }
+button[aria-pressed="true"] { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); font-weight: 600; }
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+.tile { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; }
+.tile .k { color: var(--muted); font-size: .82rem; }
+.tile .v { font-size: 1.6rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+.tile .s { font-size: .85rem; font-variant-numeric: tabular-nums; }
+.up { color: var(--up); } .down { color: var(--down); }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 12px; }
+.chart { position: relative; }
+.chart svg { display: block; width: 100%; height: 180px; }
+.tip { position: absolute; pointer-events: none; background: var(--ink); color: var(--surface); padding: 4px 8px; border-radius: 4px; font-size: .82rem; white-space: nowrap; transform: translate(-50%, -110%); display: none; }
+.scroll { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+th, td { text-align: left; padding: 7px 8px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+th { color: var(--muted); font-weight: 500; font-size: .85rem; }
+td.n, th.n { text-align: right; }
+tr.sub td:first-child { padding-left: 26px; color: var(--muted); }
+tr.toggle { cursor: pointer; }
+.empty { color: var(--muted); padding: 16px 8px; }
+.pill { display: inline-block; padding: 3px 10px; border-radius: 99px; font-size: .82rem; border: 1px solid currentColor; }
+td.note { white-space: normal; min-width: 260px; color: var(--muted); font-size: .88rem; }
+</style>
+</head>
+<body>
+<main>
+  <div class="top">
+    <h1>Trade Dashboard</h1>
+    <span class="muted" id="meta">กำลังโหลด…</span>
+  </div>
+  <div id="warn" class="warn" hidden></div>
+
+  <h2>สถานะบอท <span class="muted" id="botsMeta"></span></h2>
+  <div class="card scroll"><table id="bots"></table></div>
+  <p class="muted">Backtest 12 เดือนล่าสุด หักสเปรด XM แล้ว (ทอง 0.55 USD, คู่เงิน 2.0–4.0 pip) · R = เท่าของความเสี่ยงต่อไม้</p>
+
+  <div class="filters">
+    <b>ช่วงเวลา</b>
+    <button data-range="today">วันนี้</button>
+    <button data-range="7">7 วัน</button>
+    <button data-range="30">30 วัน</button>
+    <button data-range="all">ทั้งหมด</button>
+    <input type="date" id="from" aria-label="ตั้งแต่วันที่"> – <input type="date" id="to" aria-label="ถึงวันที่">
+    <span class="sep"></span>
+    <b>Script</b>
+    <select id="script" aria-label="Script"></select>
+  </div>
+
+  <div class="tiles" id="tiles"></div>
+
+  <h2>กำไรสะสม (USD)</h2>
+  <div class="card chart" id="chart"></div>
+
+  <h2>แยกตาม Script</h2>
+  <div class="card scroll"><table id="byScript"></table></div>
+
+  <h2>ไม้ที่ถืออยู่</h2>
+  <div class="card scroll"><table id="open"></table></div>
+
+  <h2>History</h2>
+  <div class="card scroll"><table id="history"></table></div>
+</main>
+
+<script>
+const TZ = "Asia/Bangkok";
+const DAY = 86400000;
+const STALE_MIN = 15;
+const fmtTime = new Intl.DateTimeFormat("en-GB", { timeZone: TZ, day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+const fmtDay = new Intl.DateTimeFormat("en-CA", { timeZone: TZ });   // YYYY-MM-DD ตามเวลาไทย
+const money = (v) => (v > 0 ? "+" : "") + v.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const tone = (v) => (v > 0 ? "up" : v < 0 ? "down" : "");
+const dayStart = (ymd) => Date.parse(ymd + "T00:00:00+07:00");
+
+let data = { closed: [], open: [] };
+let range = "7";
+let expanded = false;
+const $ = (id) => document.getElementById(id);
+
+function el(tag, text, cls) {
+  const e = document.createElement(tag);
+  if (text !== undefined && text !== null) e.textContent = text;
+  if (cls) e.className = cls;
+  return e;
+}
+
+function row(cells, cls) {
+  const tr = el("tr", null, cls);
+  for (const c of cells) {
+    const [text, k] = Array.isArray(c) ? c : [c, ""];
+    tr.append(el("td", text, k));
+  }
+  return tr;
+}
+
+function head(table, cols) {
+  table.replaceChildren();
+  const tr = el("tr");
+  for (const c of cols) tr.append(el("th", c.replace(/^#/, ""), c.startsWith("#") ? "n" : ""));
+  table.append(tr);
+}
+
+function bounds() {
+  const now = Date.now();
+  if (range === "today") return [dayStart(fmtDay.format(now)), Infinity];
+  if (range === "all") return [-Infinity, Infinity];
+  if (range === "custom") {
+    const f = $("from").value, t = $("to").value;
+    return [f ? dayStart(f) : -Infinity, t ? dayStart(t) + DAY : Infinity];
+  }
+  return [now - Number(range) * DAY, Infinity];
+}
+
+function matchScript(t) {
+  const v = $("script").value;
+  if (v === "all") return true;
+  const [script, preset] = v.split("|");
+  return t.script === script && (!preset || t.preset === preset);
+}
+
+function stats(list) {
+  const wins = list.filter((t) => t.net > 0).length;
+  const losses = list.filter((t) => t.net < 0).length;
+  const gross = list.reduce((s, t) => s + Math.max(t.net, 0), 0);
+  const loss = list.reduce((s, t) => s + Math.min(t.net, 0), 0);
+  return { n: list.length, wins, losses, gross, loss, net: gross + loss, rate: list.length ? wins / list.length : null };
+}
+
+function render() {
+  for (const b of document.querySelectorAll("[data-range]")) b.setAttribute("aria-pressed", String(b.dataset.range === range));
+  const [from, to] = bounds();
+  const closed = data.closed.filter((t) => t.close_time * 1000 >= from && t.close_time * 1000 < to && matchScript(t));
+  const open = data.open.filter(matchScript);
+  renderTiles(stats(closed), open);
+  renderChart(closed);
+  renderByScript(data.closed.filter((t) => t.close_time * 1000 >= from && t.close_time * 1000 < to), data.open);
+  renderOpen(open);
+  renderHistory(closed);
+}
+
+function tile(k, v, vCls, s, sCls) {
+  const d = el("div", null, "tile");
+  d.append(el("div", k, "k"), el("div", v, "v " + (vCls || "")));
+  if (s) d.append(el("div", s, "s " + (sCls || "")));
+  return d;
+}
+
+function renderTiles(s, open) {
+  const floating = open.reduce((a, p) => a + p.floating, 0);
+  $("tiles").replaceChildren(
+    tile("ไม้ที่ปิดแล้ว", String(s.n)),
+    tile("Win Rate", s.rate === null ? "–" : Math.round(s.rate * 100) + "%", "", `ชนะ ${s.wins} / แพ้ ${s.losses}`),
+    tile("กำไรสุทธิ (USD)", money(s.net), tone(s.net)),
+    tile("กำไรรวม", money(s.gross), tone(s.gross)),
+    tile("ขาดทุนรวม", money(s.loss), tone(s.loss)),
+    tile("ถืออยู่", String(open.length), "", "ลอย " + money(floating), tone(floating)),
+  );
+}
+
+function renderChart(closed) {
+  const box = $("chart");
+  box.replaceChildren();
+  const pts = [...closed].sort((a, b) => a.close_time - b.close_time);
+  if (pts.length < 2) { box.append(el("div", "มีไม้ไม่ถึง 2 ไม้ในช่วงนี้ ยังวาดกราฟไม่ได้", "empty")); return; }
+  let sum = 0;
+  const ys = [0, ...pts.map((t) => (sum += t.net))];
+  const W = 800, H = 180, P = 10;
+  const lo = Math.min(...ys), hi = Math.max(...ys), span = hi - lo || 1;
+  const x = (i) => P + (i / (ys.length - 1)) * (W - 2 * P);
+  const y = (v) => P + (1 - (v - lo) / span) * (H - 2 * P);
+  const NS = "http://www.w3.org/2000/svg";
+  const svg = document.createElementNS(NS, "svg");
+  svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
+  svg.setAttribute("preserveAspectRatio", "none");
+  svg.setAttribute("role", "img");
+  svg.setAttribute("aria-label", `กำไรสะสม ${pts.length} ไม้ จบที่ ${money(sum)} USD`);
+  const mk = (tag, attrs) => { const e = document.createElementNS(NS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); e.setAttribute("vector-effect", "non-scaling-stroke"); svg.append(e); return e; };
+  mk("line", { x1: P, x2: W - P, y1: y(0), y2: y(0), stroke: "var(--muted)", "stroke-width": 1, "stroke-dasharray": "4 4" });
+  mk("polyline", { points: ys.map((v, i) => `${x(i)},${y(v)}`).join(" "), fill: "none", stroke: "var(--accent)", "stroke-width": 2, "stroke-linejoin": "round" });
+  const cross = mk("line", { y1: P, y2: H - P, stroke: "var(--muted)", "stroke-width": 1, visibility: "hidden" });
+  const tip = el("div", null, "tip");
+  box.append(svg, tip);
+  svg.addEventListener("mousemove", (e) => {
+    const r = svg.getBoundingClientRect();
+    const i = Math.max(1, Math.min(ys.length - 1, Math.round(((e.clientX - r.left) / r.width * W - P) / (W - 2 * P) * (ys.length - 1))));
+    const t = pts[i - 1];
+    cross.setAttribute("x1", x(i)); cross.setAttribute("x2", x(i)); cross.setAttribute("visibility", "visible");
+    tip.textContent = `${fmtTime.format(t.close_time * 1000)} · ${t.symbol} ${money(t.net)} · สะสม ${money(ys[i])}`;
+    tip.style.left = (x(i) / W * r.width + 12) + "px";
+    tip.style.top = (y(ys[i]) / H * r.height + 12) + "px";
+    tip.style.display = "block";
+  });
+  svg.addEventListener("mouseleave", () => { tip.style.display = "none"; cross.setAttribute("visibility", "hidden"); });
+}
+
+function scriptRow(name, list, open, cls) {
+  const s = stats(list);
+  const fl = open.reduce((a, p) => a + p.floating, 0);
+  return row([name, [s.n, "n"], [s.rate === null ? "–" : Math.round(s.rate * 100) + "%", "n"],
+    [money(s.gross), "n " + tone(s.gross)], [money(s.loss), "n " + tone(s.loss)], [money(s.net), "n " + tone(s.net)],
+    [open.length ? `${open.length} (${money(fl)})` : "0", "n"]], cls);
+}
+
+function renderByScript(closed, open) {
+  const t = $("byScript");
+  head(t, ["Script", "#ไม้", "#Win%", "#กำไร", "#ขาดทุน", "#สุทธิ", "#ถืออยู่ (ลอย)"]);
+  const names = [...new Set([...data.closed, ...data.open].map((x) => x.script))].sort();
+  if (!names.length) { t.append(row([["ยังไม่มีไม้", "empty"]])); return; }
+  for (const name of names) {
+    const c = closed.filter((x) => x.script === name), o = open.filter((x) => x.script === name);
+    if (name !== "Forex") { t.append(scriptRow(name, c, o)); continue; }
+    const r = scriptRow((expanded ? "▾ " : "▸ ") + "Forex", c, o, "toggle");
+    r.title = "คลิกเพื่อดูแยก preset";
+    r.addEventListener("click", () => { expanded = !expanded; render(); });
+    t.append(r);
+    if (!expanded) continue;
+    const presets = [...new Set([...data.closed, ...data.open].filter((x) => x.script === name).map((x) => x.preset))].sort();
+    for (const p of presets) t.append(scriptRow(p, c.filter((x) => x.preset === p), o.filter((x) => x.preset === p), "sub"));
+  }
+}
+
+const who = (t) => t.preset ? `${t.script} · ${t.preset}` : t.script;
+
+function renderOpen(open) {
+  const t = $("open");
+  head(t, ["เปิดเมื่อ", "Script / preset", "คู่", "ฝั่ง", "#Lot", "#ราคาเปิด", "#ลอย"]);
+  if (!open.length) { t.append(row([["ไม่มีไม้ที่ถืออยู่", "empty"]])); return; }
+  for (const p of [...open].sort((a, b) => b.open_time - a.open_time)) {
+    t.append(row([fmtTime.format(p.open_time * 1000), who(p), p.symbol, p.side, [p.volume.toFixed(2), "n"],
+      [String(p.open_price), "n"], [money(p.floating), "n " + tone(p.floating)]]));
+  }
+}
+
+function renderHistory(closed) {
+  const t = $("history");
+  head(t, ["ปิดเมื่อ", "Script / preset", "คู่", "ฝั่ง", "#Lot", "#เปิด → ปิด", "เหตุผลปิด", "#สุทธิ"]);
+  if (!closed.length) { t.append(row([["ไม่มีไม้ที่ปิดในช่วงนี้", "empty"]])); return; }
+  for (const x of closed) {
+    t.append(row([fmtTime.format(x.close_time * 1000), who(x), x.symbol, x.side, [x.volume.toFixed(2), "n"],
+      [`${x.open_price ?? "?"} → ${x.close_price}`, "n"], x.reason, [money(x.net), "n " + tone(x.net)]]));
+  }
+}
+
+function fillScripts() {
+  const sel = $("script"), keep = sel.value || "all";
+  sel.replaceChildren(new Option("ทั้งหมด", "all"));
+  const all = [...data.closed, ...data.open];
+  for (const name of [...new Set(all.map((x) => x.script))].sort()) {
+    sel.append(new Option(name, name));
+    if (name === "Forex") {
+      for (const p of [...new Set(all.filter((x) => x.script === name).map((x) => x.preset))].sort()) sel.append(new Option("   · " + p, name + "|" + p));
+    }
+  }
+  sel.value = [...sel.options].some((o) => o.value === keep) ? keep : "all";
+}
+
+async function load() {
+  try {
+    const r = await fetch("api/data?f=trades", { cache: "no-store" });
+    if (!r.ok) throw new Error(r.status === 503 ? "ยังไม่มีข้อมูล รอ export รอบแรก" : "HTTP " + r.status);
+    data = await r.json();
+  } catch (e) {
+    $("warn").hidden = false;
+    $("warn").textContent = "โหลดข้อมูลไม่ได้: " + e.message;
+    return;
+  }
+  const age = (Date.now() / 1000 - data.updated) / 60;
+  const a = data.account;
+  $("meta").textContent = `อัปเดต ${fmtTime.format(data.updated * 1000)} (${Math.round(age)} นาทีที่แล้ว) · Balance ${a.balance.toFixed(2)} · Equity ${a.equity.toFixed(2)} ${a.currency}`;
+  $("warn").hidden = age <= STALE_MIN;
+  $("warn").textContent = `ข้อมูลไม่ได้อัปเดตมา ${Math.round(age)} นาที ให้เช็ก mt5-vercel-push.timer, mt5-trade-export.timer หรือ MT5 บน Pi 4`;
+  fillScripts();
+  render();
+}
+
+const BOTS = [
+  ["trend_plus", "Trend Plus", "ทอง M15", "555032", "+77.7R · PF 1.22 กำไรชัดที่สุด"],
+  ["sideway", "Sideway", "ทอง M15", "555031", "+16.2R · PF 1.19 (ข้อมูล 6 เดือน)"],
+  ["session", "Session", "ทอง M30", "555033", "+17.7R · PF 1.13 แต่ปีก่อน ๆ ติดลบ preset M30_london_mom_stable ดีกว่า (+31.8R)"],
+  ["forex", "Forex", "EURUSD GBPUSD USDJPY EURJPY GBPJPY", "555041–555052", "−29.8R รวมทุก preset ขาดทุนที่สเปรด XM"],
+  ["volscalp", "VolScalp", "ทอง M15", "555034", "+4.2R · PF 1.06 และขาดทุนในข้อมูล 2–3 ปีก่อน"],
+  ["ma_fibo", "MA-Fibo", "คู่เงิน", "555061–555076", "ขาดทุนแทบทุก preset ที่สเปรด XM"],
+];
+
+function botState(s) {
+  if (!s || !s.LoadState) return ["อ่านสถานะไม่ได้", "down"];
+  if (s.LoadState === "not-found") return ["ยังไม่ติดตั้ง service", "muted"];
+  if (s.ActiveState === "active") return ["รันอยู่", "up"];
+  if (s.ActiveState === "activating") return ["กำลังเริ่ม", "muted"];
+  return [s.ActiveState === "failed" ? "ล้มเหลว" : "หยุดอยู่", "down"];
+}
+
+async function loadBots() {
+  let st = null;
+  try {
+    const r = await fetch("api/data?f=bots", { cache: "no-store" });
+    if (r.ok) st = await r.json();
+  } catch (e) { /* แสดงเป็นอ่านสถานะไม่ได้ */ }
+  const t = $("bots");
+  head(t, ["บอท", "สินทรัพย์", "MAGIC", "สถานะ", "Backtest"]);
+  let running = 0;
+  for (const [unit, name, asset, magic, note] of BOTS) {
+    const [label, cls] = botState(st && st[unit]);
+    if (cls === "up") running++;
+    const r = row([name, asset, magic, "", [note, "note"]]);
+    r.children[3].append(el("span", label, "pill " + cls));
+    t.append(r);
+  }
+  $("botsMeta").textContent = st ? `· รันอยู่ ${running} จาก ${BOTS.length} · เช็ก ${fmtTime.format(Date.now())}` : "· อ่านสถานะจาก Pi ไม่ได้";
+}
+
+for (const b of document.querySelectorAll("[data-range]")) b.addEventListener("click", () => { range = b.dataset.range; $("from").value = $("to").value = ""; render(); });
+for (const id of ["from", "to"]) $(id).addEventListener("change", () => { range = "custom"; render(); });
+$("script").addEventListener("change", render);
+load();
+loadBots();
+setInterval(() => { load(); loadBots(); }, 60000);
+</script>
+</body>
+</html>
