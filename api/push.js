@@ -21,5 +21,6 @@ export async function POST(request) {
   if (!j || typeof j.trades !== "object" || typeof j.bots !== "object") return new Response("need trades and bots", { status: 400 });
   await redis("SET", "dash:trades", JSON.stringify(j.trades));
   await redis("SET", "dash:bots", JSON.stringify(j.bots));
+  if (j.trades_exness && typeof j.trades_exness === "object") await redis("SET", "dash:trades_exness", JSON.stringify(j.trades_exness));
   return new Response("ok");
 }
