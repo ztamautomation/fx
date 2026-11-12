@@ -408,21 +408,28 @@ function scriptCard(name, list, open, opts = {}) {
 function renderByScript(closed, open) {
   const t = $("byScript");
   t.replaceChildren();
-  const names = [...new Set([...data.closed, ...data.open].map((x) => x.script))].sort();
-  $("scriptCount").textContent = `${names.length} ระบบ · ${RANGE_LABEL[range]}`;
-  if (!names.length) { t.append(el("div", "ยังไม่มีไม้", "empty")); return; }
-  for (const name of names) {
+  // รุ่น 1K (รันอยู่) แสดงเสมอแม้ยังไม่มีไม้ แล้วตามด้วยข้อมูลเก่าที่คิด lot จากทั้งบัญชี
+  const seen = new Set([...data.closed, ...data.open].map((x) => x.script));
+  const live = [...new Set([...RUNNING_1K, ...[...seen].filter((n) => n.endsWith(" 1K"))])];
+  const old = [...seen].filter((n) => !n.endsWith(" 1K")).sort();
+  $("scriptCount").textContent = `${live.length + old.length} ระบบ · ${RANGE_LABEL[range]}`;
+  const head = (text) => { const h = el("div", text, "tick"); h.style.gridColumn = "1 / -1"; h.style.marginTop = "4px"; t.append(h); };
+  for (const name of [...live, ...old]) {
+    if (name === live[0]) head("รันอยู่ · ทุนเสมือน 1,000 USD ต่อระบบ");
+    if (name === old[0]) head("ข้อมูลเก่า · คิด lot จากทั้งบัญชี (ก่อน 12 พ.ย.)");
     const c = closed.filter((x) => x.script === name), o = open.filter((x) => x.script === name);
     // รุ่น 1K: ทุนเสมือน 1,000 USD + กำไรสุทธิทั้งหมด (ไม่ขึ้นกับช่วงเวลาที่เลือก)
     const capital = name.endsWith(" 1K") ? 1000 + data.closed.filter((x) => x.script === name).reduce((a, x) => a + x.net, 0) : 0;
     if (!name.startsWith("Forex")) { t.append(scriptCard(name, c, o, { capital })); continue; }
-    const open = expanded.has(name);
-    t.append(scriptCard((open ? "▾ " : "▸ ") + name, c, o, { open, capital, toggle: () => { open ? expanded.delete(name) : expanded.add(name); render(); } }));
-    if (!open) continue;
+    const isOpen = expanded.has(name);
+    t.append(scriptCard((isOpen ? "▾ " : "▸ ") + name, c, o, { open: isOpen, capital, toggle: () => { isOpen ? expanded.delete(name) : expanded.add(name); render(); } }));
+    if (!isOpen) continue;
     const presets = [...new Set([...data.closed, ...data.open].filter((x) => x.script === name).map((x) => x.preset))].sort();
     for (const p of presets) t.append(scriptCard(p, c.filter((x) => x.preset === p), o.filter((x) => x.preset === p), { sub: true }));
   }
 }
+
+const RUNNING_1K = ["Gold Trend 1K", "Gold Sideway 1K", "Gold Session 1K", "Gold VolScalp 1K", "Forex v2 1K", "Argon FVG 1K"];
 
 const who = (t) => t.preset ? `${t.script} · ${t.preset}` : t.script;
 
@@ -520,13 +527,13 @@ async function load() {
 }
 
 const BOTS = [
-  ["trend_plus", "Trend Plus", "ทอง M15 · Donchian breakout", "+77.7R", "PF 1.22"],
-  ["sideway", "Sideway", "ทอง M15 · BB + RSI (6 เดือน)", "+16.2R", "PF 1.19"],
-  ["session", "Session", "ทอง M30 · London momentum", "+17.7R", "PF 1.13"],
-  ["forex", "Forex v2", "4 preset · ตัวกรอง + คุมความเสี่ยงพอร์ต", "-29.8R", "12 preset เดิม"],
+  ["trend_plus", "Trend Plus 1K", "ทอง M15 · Donchian breakout", "+77.7R", "PF 1.22"],
+  ["sideway", "Sideway 1K", "ทอง M15 · BB + RSI (6 เดือน)", "+16.2R", "PF 1.19"],
+  ["session", "Session 1K", "ทอง M30 · London momentum", "+17.7R", "PF 1.13"],
+  ["forex", "Forex v2 1K", "4 preset · ตัวกรอง + คุมความเสี่ยงพอร์ต", "-29.8R", "12 preset เดิม"],
   ["forex-v1", "Forex v1", "รุ่นเดิม · ใช้สลับแทน v2", "-29.8R", "12 preset เดิม"],
-  ["volscalp", "VolScalp", "ทอง M15 · ADX + EMA20", "+4.2R", "PF 1.06"],
-  ["argon", "Argon FVG", "EURUSD M15 · Liquidity Sweep + FVG Limit", "+38%", "PF 1.50"],
+  ["volscalp", "VolScalp 1K", "ทอง M15 · ADX + EMA20", "+4.2R", "PF 1.06"],
+  ["argon", "Argon FVG 1K", "EURUSD M15 · Liquidity Sweep + FVG Limit", "+38%", "PF 1.50"],
   ["ma_fibo", "MA-Fibo", "คู่เงิน · MA + Fibonacci", "ติดลบ", "แทบทุก preset"],
 ];
 
