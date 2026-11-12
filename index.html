@@ -575,7 +575,7 @@ function botState(s) {
 async function loadBots() {
   let st = null;
   try {
-    const r = await fetch("bots.json", { cache: "no-store" });
+    const r = await fetch(SRC("bots"), { cache: "no-store" });
     if (r.ok) st = await r.json();
   } catch (e) { /* แสดงเป็นอ่านสถานะไม่ได้ */ }
   const t = $("botList");
