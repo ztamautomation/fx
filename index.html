@@ -147,7 +147,7 @@ nav.bottom a.on { color: var(--cyan); }
     <div class="status"><span class="l"><span class="dot" id="sDot" style="color:var(--slate)"></span><span id="acctLabel">XM MT5 · DEMO</span></span><span id="meta">กำลังโหลด…</span></div>
     <div class="seg" role="group" aria-label="เลือกบัญชี" id="acctSeg">
       <button type="button" data-acct="xm">XM Demo</button>
-      <button type="button" data-acct="exness">Exness เงินจริง</button>
+      <button type="button" data-acct="exness">zTAM USDc</button>
     </div>
     <div id="warn" class="warn" hidden></div>
   </header>
@@ -223,7 +223,7 @@ const ACCTS = {
   xm: { file: "trades", label: "XM MT5 · DEMO", isLive: (n) => n.endsWith(" 1K"),
         running: ["Gold Trend 1K", "Gold Sideway 1K", "Gold Session 1K", "Gold VolScalp 1K", "Forex v2 1K", "Argon FVG 1K"],
         head: "รันอยู่ · ทุนเสมือน 1,000 USD ต่อระบบ", oldHead: "ข้อมูลเก่า · คิด lot จากทั้งบัญชี (ก่อน 12 พ.ย.)" },
-  exness: { file: "trades_exness", label: "Exness MT5 · REAL (Cent)", isLive: () => true,
+  exness: { file: "trades_exness", label: "zTAM USDc · Exness REAL", isLive: () => true,
         running: ["Gold Trend", "Gold Session", "Gold VolScalp"],
         head: "รันอยู่ · คิด lot จากยอดทั้งบัญชี (หน่วย USC = 1/100 USD)", oldHead: "" },
 };
@@ -561,7 +561,7 @@ const BOTS = [
   ["ex-session", "Exness Session", "XAUUSDc M30 · London momentum", "1.5%", "ต่อไม้", "exness"],
   ["ex-volscalp", "Exness VolScalp", "XAUUSDc M15 · ADX + EMA20", "1%", "ต่อไม้", "exness"],
 ];
-const BOTS_NOTE = { xm: "", exness: "บัญชีเงินจริง Exness Cent · คิด lot จากยอดทั้งบัญชี · ตัวเลขด้านขวา = ความเสี่ยงต่อไม้ (% ของยอด)" };
+const BOTS_NOTE = { xm: "", exness: "zTAM USDc · บัญชีเงินจริง Exness Cent · คิด lot จากยอดทั้งบัญชี · ตัวเลขด้านขวา = ความเสี่ยงต่อไม้ (% ของยอด)" };
 
 function botState(s) {
   if (!s || !s.LoadState) return ["อ่านสถานะไม่ได้", "bad"];
