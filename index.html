@@ -221,7 +221,7 @@ const RANGE_LABEL = { today: "วันนี้", 7: "7 วัน", 30: "30 ว
 
 let data = { closed: [], open: [] };
 let range = "7";
-let expanded = false;
+const expanded = new Set();   // ชื่อระบบ Forex ที่กางดู preset อยู่
 let histShown = HIST_PAGE;
 const $ = (id) => document.getElementById(id);
 
@@ -393,7 +393,7 @@ function scriptCard(name, list, open, opts = {}) {
   const s = stats(list);
   const fl = open.reduce((a, p) => a + p.floating, 0);
   const c = el(opts.toggle ? "button" : "div", null, "card sc" + (opts.sub ? " sub" : ""));
-  if (opts.toggle) { c.type = "button"; c.setAttribute("aria-expanded", String(expanded)); c.addEventListener("click", opts.toggle); }
+  if (opts.toggle) { c.type = "button"; c.setAttribute("aria-expanded", String(opts.open)); c.addEventListener("click", opts.toggle); }
   const l = el("div");
   l.style.minWidth = "0";
   l.append(el("div", name, "n"), el("div", `${s.n} ไม้ · WR ${s.rate === null ? "–" : Math.round(s.rate * 100) + "%"}${open.length ? ` · ถือ ${open.length}` : ""}`, "d"));
@@ -412,9 +412,10 @@ function renderByScript(closed, open) {
   if (!names.length) { t.append(el("div", "ยังไม่มีไม้", "empty")); return; }
   for (const name of names) {
     const c = closed.filter((x) => x.script === name), o = open.filter((x) => x.script === name);
-    if (name !== "Forex") { t.append(scriptCard(name, c, o)); continue; }
-    t.append(scriptCard((expanded ? "▾ " : "▸ ") + "Forex (คู่เงิน)", c, o, { toggle: () => { expanded = !expanded; render(); } }));
-    if (!expanded) continue;
+    if (!name.startsWith("Forex")) { t.append(scriptCard(name, c, o)); continue; }
+    const open = expanded.has(name);
+    t.append(scriptCard((open ? "▾ " : "▸ ") + name, c, o, { open, toggle: () => { open ? expanded.delete(name) : expanded.add(name); render(); } }));
+    if (!open) continue;
     const presets = [...new Set([...data.closed, ...data.open].filter((x) => x.script === name).map((x) => x.preset))].sort();
     for (const p of presets) t.append(scriptCard(p, c.filter((x) => x.preset === p), o.filter((x) => x.preset === p), { sub: true }));
   }
@@ -471,7 +472,7 @@ function fillScripts() {
   const all = [...data.closed, ...data.open];
   for (const name of [...new Set(all.map((x) => x.script))].sort()) {
     sel.append(new Option(name, name));
-    if (name === "Forex") {
+    if (name.startsWith("Forex")) {
       for (const p of [...new Set(all.filter((x) => x.script === name).map((x) => x.preset))].sort()) sel.append(new Option("   · " + p, name + "|" + p));
     }
   }
@@ -519,7 +520,8 @@ const BOTS = [
   ["trend_plus", "Trend Plus", "ทอง M15 · Donchian breakout", "+77.7R", "PF 1.22"],
   ["sideway", "Sideway", "ทอง M15 · BB + RSI (6 เดือน)", "+16.2R", "PF 1.19"],
   ["session", "Session", "ทอง M30 · London momentum", "+17.7R", "PF 1.13"],
-  ["forex", "Forex", "5 คู่เงิน · รวมทุก preset", "-29.8R", "ขาดทุน"],
+  ["forex", "Forex v2", "4 preset · ตัวกรอง + คุมความเสี่ยงพอร์ต", "-29.8R", "12 preset เดิม"],
+  ["forex-v1", "Forex v1", "รุ่นเดิม · ใช้สลับแทน v2", "-29.8R", "12 preset เดิม"],
   ["volscalp", "VolScalp", "ทอง M15 · ADX + EMA20", "+4.2R", "PF 1.06"],
   ["ma_fibo", "MA-Fibo", "คู่เงิน · MA + Fibonacci", "ติดลบ", "แทบทุก preset"],
 ];
@@ -529,6 +531,7 @@ function botState(s) {
   if (s.LoadState === "not-found") return ["ยังไม่ติดตั้ง service", "off"];
   if (s.ActiveState === "active") return ["รันอยู่", "on"];
   if (s.ActiveState === "activating") return ["กำลังเริ่ม", "off"];
+  if (s.ActiveState === "inactive" && s.UnitFileState !== "enabled") return ["ปิดไว้", "off"];
   return [s.ActiveState === "failed" ? "ล้มเหลว" : "หยุดอยู่", "bad"];
 }
 
